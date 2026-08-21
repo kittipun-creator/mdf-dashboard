@@ -22,23 +22,26 @@ scopes = [
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 def load_gcp_credentials():
+    # 1. อ่านจาก GOOGLE_KEY_BASE64 (กรองขยะและลบการขึ้นบรรทัดใหม่ตรงกลางออกทั้งหมด)
     if "GOOGLE_KEY_BASE64" in st.secrets:
         try:
             raw_val = str(st.secrets["GOOGLE_KEY_BASE64"])
-            ascii_str = re.sub(r'[^\x00-\x7F]+', '', raw_val).strip('"' + "'" + " \t\n\r")
+            # สกัดเอาเฉพาะตัวอักษร Base64 แท้จริง (ตัด \n, \r, เว้นวรรค ที่ติดมาทั้งหมด)
+            clean_b64 = re.sub(r'[^A-Za-z0-9+/=]', '', raw_val)
             
-            # ซ่อมแซม Padding (=) อัตโนมัติหากจำนวนตัวอักษรไม่ครบสูตร Base64
-            missing_padding = len(ascii_str) % 4
+            # เติม '=' (Padding) ให้ครบโครงสร้าง Base64
+            missing_padding = len(clean_b64) % 4
             if missing_padding:
-                ascii_str += '=' * (4 - missing_padding)
+                clean_b64 += '=' * (4 - missing_padding)
 
-            json_bytes = base64.b64decode(ascii_str)
+            json_bytes = base64.b64decode(clean_b64)
             creds_dict = json.loads(json_bytes.decode("utf-8"))
             return Credentials.from_service_account_info(creds_dict, scopes=scopes)
         except Exception as e:
             st.error(f"❌ อ่าน GOOGLE_KEY_BASE64 ไม่สำเร็จ: {e}")
             st.stop()
 
+    # 2. อ่านจาก GOOGLE_JSON
     elif "GOOGLE_JSON" in st.secrets:
         try:
             raw_json = st.secrets["GOOGLE_JSON"]
@@ -50,6 +53,7 @@ def load_gcp_credentials():
             st.error(f"❌ อ่าน GOOGLE_JSON ไม่สำเร็จ: {e}")
             st.stop()
 
+    # 3. อ่านจากไฟล์ Local
     elif os.path.exists("google_key.json"):
         return Credentials.from_service_account_file("google_key.json", scopes=scopes)
 
