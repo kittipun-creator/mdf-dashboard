@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import google.generativeai as genai
 import gspread
 import pandas as pd
@@ -19,25 +20,47 @@ scopes = [
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-if "GOOGLE_JSON" in st.secrets:
-    try:
-        raw_json = st.secrets["GOOGLE_JSON"]
-        creds_dict = json.loads(raw_json, strict=False) if isinstance(raw_json, str) else dict(raw_json)
+def load_gcp_credentials():
+    # 1. ค้นหาจากคีย์ชื่อ GOOGLE_JSON
+    if "GOOGLE_JSON" in st.secrets:
+        raw = st.secrets["GOOGLE_JSON"]
+        creds_dict = json.loads(raw) if isinstance(raw, str) else dict(raw)
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    except Exception as e:
-        st.error(f"❌ อ่าน GOOGLE_JSON ไม่สำเร็จ: {e}")
-        st.stop()
-elif os.path.exists("google_key.json"):
-    creds = Credentials.from_service_account_file("google_key.json", scopes=scopes)
-else:
-    st.error("❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets ใน Secrets")
+        return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+
+    # 2. ค้นหาจากคีย์ชื่อ gcp_service_account
+    if "gcp_service_account" in st.secrets:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+
+    # 3. ค้นหาอัตโนมัติจากทุกคีย์ใน Secrets ที่มีข้อมูล private_key
+    for k, v in st.secrets.items():
+        try:
+            creds_dict = json.loads(v) if isinstance(v, str) else dict(v)
+            if isinstance(creds_dict, dict) and "private_key" in creds_dict:
+                creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+                return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        except Exception:
+            pass
+
+    # 4. ค้นหาจากไฟล์ Local ในเครื่อง
+    if os.path.exists("google_key.json"):
+        return Credentials.from_service_account_file("google_key.json", scopes=scopes)
+
+    st.error(f"❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets ใน Secrets (คีย์ที่ระบบเห็นใน Secrets ขณะนี้: {list(st.secrets.keys())})")
+    st.stop()
+
+try:
+    creds = load_gcp_credentials()
+except Exception as e:
+    st.error(f"❌ โครงสร้างกุญแจ Google Sheets มีปัญหา: {e}")
     st.stop()
 
 genai.configure(api_key=GEMINI_API_KEY)
 client = gspread.authorize(creds)
-
 
 # ==========================================
 # 1. ตั้งค่าการเชื่อมต่อ (Local & Cloud)
