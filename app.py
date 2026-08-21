@@ -20,6 +20,69 @@ scopes = [
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
+def sanitize_pem_key(key_str):
+    """ทำความสะอาดและจัดโครงสร้าง PEM Key ใหม่หมดเพื่อป้องกัน MalformedFraming"""
+    if not key_str:
+        return key_str
+    key_str = key_str.replace("\\n", "\n").replace("\r", "").strip('"' + "'" + " \t\n")
+    
+    if "-----BEGIN PRIVATE KEY-----" in key_str and "-----END PRIVATE KEY-----" in key_str:
+        # ดึงเฉพาะเนื้อหารหัสสตรีม
+        body = key_str.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+        body_clean = "".join(body.split())
+        # จัดบรรทัดละ 64 ตัวอักษรตามมาตรฐาน PEM
+        formatted_body = "\n".join([body_clean[i:i+64] for i in range(0, len(body_clean), 64)])
+        return f"-----BEGIN PRIVATE KEY-----\n{formatted_body}\n-----END PRIVATE KEY-----\n"
+    return key_str
+
+def load_gcp_credentials():
+    creds_dict = None
+    
+    if "gcp_service_account" in st.secrets:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+    elif "GOOGLE_JSON" in st.secrets:
+        raw_json = st.secrets["GOOGLE_JSON"]
+        creds_dict = json.loads(raw_json, strict=False) if isinstance(raw_json, str) else dict(raw_json)
+    elif os.path.exists("google_key.json"):
+        return Credentials.from_service_account_file("google_key.json", scopes=scopes)
+    
+    if creds_dict:
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = sanitize_pem_key(str(creds_dict["private_key"]))
+        return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    
+    st.error("❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets กรุณาตั้งค่า Secrets")
+    st.stop()
+
+try:
+    creds = load_gcp_credentials()
+except Exception as e:
+    st.error(f"❌ โครงสร้างกุญแจ Google Sheets มีปัญหา: {e}")
+    st.stop()
+
+genai.configure(api_key=GEMINI_API_KEY)
+client = gspread.authorize(creds)import os
+import json
+import re
+import google.generativeai as genai
+import gspread
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from google.oauth2.service_account import Credentials
+
+st.set_page_config(page_title="MDF Quality Dashboard", layout="wide")
+
+# ==========================================
+# 1. ตั้งค่าการเชื่อมต่อ (Local & Cloud)
+# ==========================================
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+
 def load_gcp_credentials():
     creds_dict = None
     
