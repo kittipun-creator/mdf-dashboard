@@ -1,7 +1,6 @@
 import os
 import json
 import base64
-import re
 import google.generativeai as genai
 import gspread
 import pandas as pd
@@ -22,26 +21,18 @@ scopes = [
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 def load_gcp_credentials():
-    # 1. อ่านจาก GOOGLE_KEY_BASE64 (รองรับสัญลักษณ์ URL-safe และข้ามไบต์ขยะ)
+    creds_dict = None
+
+    # 1. อ่านจาก GOOGLE_KEY_BASE64
     if "GOOGLE_KEY_BASE64" in st.secrets:
         try:
-            raw_val = str(st.secrets["GOOGLE_KEY_BASE64"])
-            # กรองเฉพาะตัวอักษร Base64 (รวม - และ _ สำหรับ URL-safe)
-            clean_b64 = re.sub(r'[^A-Za-z0-9+/=\-_]', '', raw_val)
-            clean_b64 = clean_b64.replace('-', '+').replace('_', '/')
+            b64_str = str(st.secrets["GOOGLE_KEY_BASE64"]).strip().strip('"').strip("'")
+            clean_b64 = "".join(b64_str.split()) # ลบช่องว่าง/การขึ้นบรรทัดใหม่ทั้งหมด
             
-            # ซ่อมแซม Padding
-            missing_padding = len(clean_b64) % 4
-            if missing_padding:
-                clean_b64 += '=' * (4 - missing_padding)
-
             json_bytes = base64.b64decode(clean_b64)
-            # ถอดรหัส UTF-8 โดยข้ามไบต์ขยะเพื่อป้องกัน UTF-8 decode error
-            json_str = json_bytes.decode("utf-8", errors="ignore")
-            creds_dict = json.loads(json_str)
-            return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+            creds_dict = json.loads(json_bytes.decode("utf-8"))
         except Exception as e:
-            st.error(f"❌ อ่าน GOOGLE_KEY_BASE64 ไม่สำเร็จ: {e}")
+            st.error(f"❌ ถอดรหัส GOOGLE_KEY_BASE64 ไม่สำเร็จ: {e}")
             st.stop()
 
     # 2. อ่านจาก GOOGLE_JSON
@@ -49,9 +40,6 @@ def load_gcp_credentials():
         try:
             raw_json = st.secrets["GOOGLE_JSON"]
             creds_dict = json.loads(raw_json, strict=False) if isinstance(raw_json, str) else dict(raw_json)
-            if "private_key" in creds_dict:
-                creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-            return Credentials.from_service_account_info(creds_dict, scopes=scopes)
         except Exception as e:
             st.error(f"❌ อ่าน GOOGLE_JSON ไม่สำเร็จ: {e}")
             st.stop()
@@ -59,6 +47,12 @@ def load_gcp_credentials():
     # 3. อ่านจากไฟล์ Local
     elif os.path.exists("google_key.json"):
         return Credentials.from_service_account_file("google_key.json", scopes=scopes)
+
+    # ปรับแต่ง private_key ให้มี \n จริง
+    if creds_dict:
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        return Credentials.from_service_account_info(creds_dict, scopes=scopes)
 
     st.error("❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets ใน Secrets")
     st.stop()
