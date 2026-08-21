@@ -21,30 +21,12 @@ scopes = [
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 def fix_pem_key(key_str):
-    """สกัดเนื้อหา Base64 และคำนวณ Padding (=) ใหม่ให้ถูกต้องตามหลักคณิตศาสตร์"""
+    """แปลงข้อความขึ้นบรรทัดใหม่ให้ถูกต้องโดยไม่ตัดเครื่องหมายเท่ากับ (==) ท้ายรหัสออก"""
     if not key_str:
         return key_str
-    key_str = str(key_str).replace("\\n", "\n").replace("\r", "")
-    
-    header = "-----BEGIN PRIVATE KEY-----"
-    footer = "-----END PRIVATE KEY-----"
-    
-    if header in key_str and footer in key_str:
-        body = key_str.split(header)[1].split(footer)[0]
-        # สกัดเฉพาะตัวอักษร Base64 (ไม่เอา = และขยะตัวอื่น)
-        clean_chars = re.sub(r'[^A-Za-z0-9+/]', '', body)
-        
-        # คำนวณหา Padding (=) ที่จำเป็นจริงๆ เท่านั้น
-        rem = len(clean_chars) % 4
-        if rem == 2:
-            clean_chars += "=="
-        elif rem == 3:
-            clean_chars += "="
-
-        # จัดบรรทัดละ 64 ตัวอักษรตามมาตรฐาน PEM
-        lines = [clean_chars[i:i+64] for i in range(0, len(clean_chars), 64)]
-        return f"{header}\n" + "\n".join(lines) + f"\n{footer}\n"
-    return key_str
+    clean_key = str(key_str).replace("\\n", "\n").replace("\r", "")
+    lines = [line.strip() for line in clean_key.split("\n") if line.strip()]
+    return "\n".join(lines) + "\n"
 
 def load_gcp_credentials():
     if "gcp_service_account" in st.secrets:
@@ -71,6 +53,7 @@ except Exception as e:
 
 genai.configure(api_key=GEMINI_API_KEY)
 client = gspread.authorize(creds)
+
 
 # ==========================================
 # 1. ตั้งค่าการเชื่อมต่อ (Local & Cloud)
