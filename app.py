@@ -22,21 +22,46 @@ scopes = [
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 def load_gcp_credentials():
-    # 1. อ่านคีย์ผ่าน Base64 ป้องกัน MalformedFraming 100%
+    # 1. อ่านจาก GOOGLE_KEY_BASE64
     if "GOOGLE_KEY_BASE64" in st.secrets:
         try:
-            base64_str = st.secrets["GOOGLE_KEY_BASE64"].strip().strip('"').strip("'")
-            json_bytes = base64.b64decode(base64_str)
+            raw_val = str(st.secrets["GOOGLE_KEY_BASE64"])
+            ascii_str = re.sub(r'[^\x00-\x7F]+', '', raw_val).strip('"' + "'" + " \t\n\r")
+            json_bytes = base64.b64decode(ascii_str)
             creds_dict = json.loads(json_bytes.decode("utf-8"))
             return Credentials.from_service_account_info(creds_dict, scopes=scopes)
         except Exception as e:
-            st.error(f"❌ อ่านรหัส GOOGLE_KEY_BASE64 ไม่สำเร็จ: {e}")
+            st.error(f"❌ อ่าน GOOGLE_KEY_BASE64 ไม่สำเร็จ: {e}")
             st.stop()
-    # 2. อ่านจากไฟล์ Local
+
+    # 2. อ่านจาก GOOGLE_JSON
+    elif "GOOGLE_JSON" in st.secrets:
+        try:
+            raw_json = st.secrets["GOOGLE_JSON"]
+            creds_dict = json.loads(raw_json, strict=False) if isinstance(raw_json, str) else dict(raw_json)
+            if "private_key" in creds_dict:
+                creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+            return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        except Exception as e:
+            st.error(f"❌ อ่าน GOOGLE_JSON ไม่สำเร็จ: {e}")
+            st.stop()
+
+    # 3. อ่านจาก [gcp_service_account]
+    elif "gcp_service_account" in st.secrets:
+        try:
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            if "private_key" in creds_dict:
+                creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+            return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        except Exception as e:
+            st.error(f"❌ อ่าน gcp_service_account ไม่สำเร็จ: {e}")
+            st.stop()
+
+    # 4. อ่านจากไฟล์ Local
     elif os.path.exists("google_key.json"):
         return Credentials.from_service_account_file("google_key.json", scopes=scopes)
-    
-    st.error("❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets กรุณาตั้งค่า GOOGLE_KEY_BASE64 ใน Secrets")
+
+    st.error("❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets ใน Secrets")
     st.stop()
 
 try:
