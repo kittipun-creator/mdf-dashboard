@@ -22,20 +22,23 @@ scopes = [
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 def load_gcp_credentials():
-    # 1. อ่านจาก GOOGLE_KEY_BASE64 (กรองขยะและลบการขึ้นบรรทัดใหม่ตรงกลางออกทั้งหมด)
+    # 1. อ่านจาก GOOGLE_KEY_BASE64 (รองรับสัญลักษณ์ URL-safe และข้ามไบต์ขยะ)
     if "GOOGLE_KEY_BASE64" in st.secrets:
         try:
             raw_val = str(st.secrets["GOOGLE_KEY_BASE64"])
-            # สกัดเอาเฉพาะตัวอักษร Base64 แท้จริง (ตัด \n, \r, เว้นวรรค ที่ติดมาทั้งหมด)
-            clean_b64 = re.sub(r'[^A-Za-z0-9+/=]', '', raw_val)
+            # กรองเฉพาะตัวอักษร Base64 (รวม - และ _ สำหรับ URL-safe)
+            clean_b64 = re.sub(r'[^A-Za-z0-9+/=\-_]', '', raw_val)
+            clean_b64 = clean_b64.replace('-', '+').replace('_', '/')
             
-            # เติม '=' (Padding) ให้ครบโครงสร้าง Base64
+            # ซ่อมแซม Padding
             missing_padding = len(clean_b64) % 4
             if missing_padding:
                 clean_b64 += '=' * (4 - missing_padding)
 
             json_bytes = base64.b64decode(clean_b64)
-            creds_dict = json.loads(json_bytes.decode("utf-8"))
+            # ถอดรหัส UTF-8 โดยข้ามไบต์ขยะเพื่อป้องกัน UTF-8 decode error
+            json_str = json_bytes.decode("utf-8", errors="ignore")
+            creds_dict = json.loads(json_str)
             return Credentials.from_service_account_info(creds_dict, scopes=scopes)
         except Exception as e:
             st.error(f"❌ อ่าน GOOGLE_KEY_BASE64 ไม่สำเร็จ: {e}")
