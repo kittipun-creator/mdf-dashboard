@@ -20,20 +20,12 @@ scopes = [
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-def fix_pem_key(key_str):
-    """แปลงข้อความขึ้นบรรทัดใหม่ให้ถูกต้องโดยไม่ตัดเครื่องหมายเท่ากับ (==) ท้ายรหัสออก"""
-    if not key_str:
-        return key_str
-    clean_key = str(key_str).replace("\\n", "\n").replace("\r", "")
-    lines = [line.strip() for line in clean_key.split("\n") if line.strip()]
-    return "\n".join(lines) + "\n"
-
 def load_gcp_credentials():
     if "gcp_service_account" in st.secrets:
         try:
             creds_dict = dict(st.secrets["gcp_service_account"])
             if "private_key" in creds_dict:
-                creds_dict["private_key"] = fix_pem_key(creds_dict["private_key"])
+                creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             return Credentials.from_service_account_info(creds_dict, scopes=scopes)
         except Exception as e:
             st.error(f"❌ อ่าน gcp_service_account ไม่สำเร็จ: {e}")
