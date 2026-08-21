@@ -21,18 +21,29 @@ scopes = [
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 def fix_pem_key(key_str):
-    """สกัดและจัดโครงสร้าง PEM Key ให้เป็นมาตรฐาน 64 ตัวอักษรต่อบรรทัด"""
+    """สกัดเนื้อหา Base64 และคำนวณ Padding (=) ใหม่ให้ถูกต้องตามหลักคณิตศาสตร์"""
     if not key_str:
         return key_str
-    key_str = str(key_str).replace("\\n", "\n")
-    if "-----BEGIN PRIVATE KEY-----" in key_str and "-----END PRIVATE KEY-----" in key_str:
-        parts = key_str.split("-----BEGIN PRIVATE KEY-----")
-        body_and_footer = parts[1].split("-----END PRIVATE KEY-----")
-        # ดึงเฉพาะตัวอักษร Base64 ที่ถูกต้อง ตัดขยะและ \n แปลกปลอมทั้งหมด
-        clean_body = re.sub(r'[^A-Za-z0-9+/=]', '', body_and_footer[0])
-        # ตัดแบ่งเป็นบรรทัดละ 64 ตัวอักษรตามมาตรฐาน PEM
-        lines = [clean_body[i:i+64] for i in range(0, len(clean_body), 64)]
-        return f"-----BEGIN PRIVATE KEY-----\n{'\n'.join(lines)}\n-----END PRIVATE KEY-----\n"
+    key_str = str(key_str).replace("\\n", "\n").replace("\r", "")
+    
+    header = "-----BEGIN PRIVATE KEY-----"
+    footer = "-----END PRIVATE KEY-----"
+    
+    if header in key_str and footer in key_str:
+        body = key_str.split(header)[1].split(footer)[0]
+        # สกัดเฉพาะตัวอักษร Base64 (ไม่เอา = และขยะตัวอื่น)
+        clean_chars = re.sub(r'[^A-Za-z0-9+/]', '', body)
+        
+        # คำนวณหา Padding (=) ที่จำเป็นจริงๆ เท่านั้น
+        rem = len(clean_chars) % 4
+        if rem == 2:
+            clean_chars += "=="
+        elif rem == 3:
+            clean_chars += "="
+
+        # จัดบรรทัดละ 64 ตัวอักษรตามมาตรฐาน PEM
+        lines = [clean_chars[i:i+64] for i in range(0, len(clean_chars), 64)]
+        return f"{header}\n" + "\n".join(lines) + f"\n{footer}\n"
     return key_str
 
 def load_gcp_credentials():
