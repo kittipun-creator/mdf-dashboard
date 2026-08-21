@@ -20,25 +20,33 @@ scopes = [
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-if "GOOGLE_JSON" in st.secrets:
-    try:
-        if isinstance(st.secrets["GOOGLE_JSON"], str):
-            google_creds_dict = json.loads(st.secrets["GOOGLE_JSON"], strict=False)
-        else:
-            google_creds_dict = dict(st.secrets["GOOGLE_JSON"])
-        
-        # ถอดรหัส private_key: แปลง \\n กลับเป็น \n (บรรทัดใหม่จริง)
-        if "private_key" in google_creds_dict:
-            google_creds_dict["private_key"] = google_creds_dict["private_key"].replace("\\n", "\n")
+def load_gcp_credentials():
+    creds_dict = None
+    
+    # 1. อ่านจากแบบ [gcp_service_account] (แนะนำสูงสุดบน Streamlit Cloud)
+    if "gcp_service_account" in st.secrets:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+    # 2. อ่านจากแบบ GOOGLE_JSON
+    elif "GOOGLE_JSON" in st.secrets:
+        raw_json = st.secrets["GOOGLE_JSON"]
+        creds_dict = json.loads(raw_json, strict=False) if isinstance(raw_json, str) else dict(raw_json)
+    # 3. อ่านจากไฟล์ google_key.json ในเครื่อง Local
+    elif os.path.exists("google_key.json"):
+        return Credentials.from_service_account_file("google_key.json", scopes=scopes)
+    
+    if creds_dict:
+        # เคลียร์ปัญหา \n แฝงใน private_key ให้เป็นบรรทัดใหม่จริง
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n").replace("\r", "")
+        return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    
+    st.error("❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets กรุณาตั้งค่า Secrets")
+    st.stop()
 
-        creds = Credentials.from_service_account_info(google_creds_dict, scopes=scopes)
-    except Exception as e:
-        st.error(f"❌ รูปแบบ Secrets ของ GOOGLE_JSON ไม่ถูกต้อง: {e}")
-        st.stop()
-elif os.path.exists("google_key.json"):
-    creds = Credentials.from_service_account_file("google_key.json", scopes=scopes)
-else:
-    st.error("❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets")
+try:
+    creds = load_gcp_credentials()
+except Exception as e:
+    st.error(f"❌ โครงสร้างกุญแจ Google Sheets มีปัญหา: {e}")
     st.stop()
 
 genai.configure(api_key=GEMINI_API_KEY)
