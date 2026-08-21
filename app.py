@@ -20,20 +20,32 @@ scopes = [
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
+def fix_pem_key(key_str):
+    """สกัดและจัดโครงสร้าง PEM Key ให้เป็นมาตรฐาน 64 ตัวอักษรต่อบรรทัด"""
+    if not key_str:
+        return key_str
+    key_str = str(key_str).replace("\\n", "\n")
+    if "-----BEGIN PRIVATE KEY-----" in key_str and "-----END PRIVATE KEY-----" in key_str:
+        parts = key_str.split("-----BEGIN PRIVATE KEY-----")
+        body_and_footer = parts[1].split("-----END PRIVATE KEY-----")
+        # ดึงเฉพาะตัวอักษร Base64 ที่ถูกต้อง ตัดขยะและ \n แปลกปลอมทั้งหมด
+        clean_body = re.sub(r'[^A-Za-z0-9+/=]', '', body_and_footer[0])
+        # ตัดแบ่งเป็นบรรทัดละ 64 ตัวอักษรตามมาตรฐาน PEM
+        lines = [clean_body[i:i+64] for i in range(0, len(clean_body), 64)]
+        return f"-----BEGIN PRIVATE KEY-----\n{'\n'.join(lines)}\n-----END PRIVATE KEY-----\n"
+    return key_str
+
 def load_gcp_credentials():
-    # 1. อ่านจาก [gcp_service_account] (มาตรฐาน Streamlit Cloud)
     if "gcp_service_account" in st.secrets:
         try:
             creds_dict = dict(st.secrets["gcp_service_account"])
             if "private_key" in creds_dict:
-                # แปลง \n ในข้อความให้เป็นบรรทัดใหม่จริง
-                creds_dict["private_key"] = str(creds_dict["private_key"]).replace("\\n", "\n")
+                creds_dict["private_key"] = fix_pem_key(creds_dict["private_key"])
             return Credentials.from_service_account_info(creds_dict, scopes=scopes)
         except Exception as e:
             st.error(f"❌ อ่าน gcp_service_account ไม่สำเร็จ: {e}")
             st.stop()
-
-    # 2. อ่านจากไฟล์ Local
+            
     elif os.path.exists("google_key.json"):
         return Credentials.from_service_account_file("google_key.json", scopes=scopes)
 
