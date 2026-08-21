@@ -18,6 +18,39 @@ scopes = [
     "https://www.googleapis.com/auth/drive",
 ]
 
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+
+if "GOOGLE_JSON" in st.secrets:
+    try:
+        if isinstance(st.secrets["GOOGLE_JSON"], str):
+            google_creds_dict = json.loads(st.secrets["GOOGLE_JSON"], strict=False)
+        else:
+            google_creds_dict = dict(st.secrets["GOOGLE_JSON"])
+        
+        # ถอดรหัส private_key: แปลง \\n กลับเป็น \n (บรรทัดใหม่จริง)
+        if "private_key" in google_creds_dict:
+            google_creds_dict["private_key"] = google_creds_dict["private_key"].replace("\\n", "\n")
+
+        creds = Credentials.from_service_account_info(google_creds_dict, scopes=scopes)
+    except Exception as e:
+        st.error(f"❌ รูปแบบ Secrets ของ GOOGLE_JSON ไม่ถูกต้อง: {e}")
+        st.stop()
+elif os.path.exists("google_key.json"):
+    creds = Credentials.from_service_account_file("google_key.json", scopes=scopes)
+else:
+    st.error("❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets")
+    st.stop()
+
+genai.configure(api_key=GEMINI_API_KEY)
+client = gspread.authorize(creds)
+# ==========================================
+# 1. ตั้งค่าการเชื่อมต่อ (Local & Cloud)
+# ==========================================
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
 # ดึง Gemini Key
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
