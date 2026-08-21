@@ -1,6 +1,6 @@
 import os
 import json
-import base64
+import re
 import google.generativeai as genai
 import gspread
 import pandas as pd
@@ -21,38 +21,21 @@ scopes = [
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 def load_gcp_credentials():
-    creds_dict = None
-
-    # 1. อ่านจาก GOOGLE_KEY_BASE64
-    if "GOOGLE_KEY_BASE64" in st.secrets:
+    # 1. อ่านจาก [gcp_service_account] (มาตรฐาน Streamlit Cloud)
+    if "gcp_service_account" in st.secrets:
         try:
-            b64_str = str(st.secrets["GOOGLE_KEY_BASE64"]).strip().strip('"').strip("'")
-            clean_b64 = "".join(b64_str.split()) # ลบช่องว่าง/การขึ้นบรรทัดใหม่ทั้งหมด
-            
-            json_bytes = base64.b64decode(clean_b64)
-            creds_dict = json.loads(json_bytes.decode("utf-8"))
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            if "private_key" in creds_dict:
+                # แปลง \n ในข้อความให้เป็นบรรทัดใหม่จริง
+                creds_dict["private_key"] = str(creds_dict["private_key"]).replace("\\n", "\n")
+            return Credentials.from_service_account_info(creds_dict, scopes=scopes)
         except Exception as e:
-            st.error(f"❌ ถอดรหัส GOOGLE_KEY_BASE64 ไม่สำเร็จ: {e}")
+            st.error(f"❌ อ่าน gcp_service_account ไม่สำเร็จ: {e}")
             st.stop()
 
-    # 2. อ่านจาก GOOGLE_JSON
-    elif "GOOGLE_JSON" in st.secrets:
-        try:
-            raw_json = st.secrets["GOOGLE_JSON"]
-            creds_dict = json.loads(raw_json, strict=False) if isinstance(raw_json, str) else dict(raw_json)
-        except Exception as e:
-            st.error(f"❌ อ่าน GOOGLE_JSON ไม่สำเร็จ: {e}")
-            st.stop()
-
-    # 3. อ่านจากไฟล์ Local
+    # 2. อ่านจากไฟล์ Local
     elif os.path.exists("google_key.json"):
         return Credentials.from_service_account_file("google_key.json", scopes=scopes)
-
-    # ปรับแต่ง private_key ให้มี \n จริง
-    if creds_dict:
-        if "private_key" in creds_dict:
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-        return Credentials.from_service_account_info(creds_dict, scopes=scopes)
 
     st.error("❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets ใน Secrets")
     st.stop()
