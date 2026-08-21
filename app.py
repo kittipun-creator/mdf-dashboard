@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import re
 import google.generativeai as genai
 import gspread
@@ -9,6 +10,43 @@ import streamlit as st
 from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="MDF Quality Dashboard", layout="wide")
+
+# ==========================================
+# 1. ตั้งค่าการเชื่อมต่อ (Local & Cloud)
+# ==========================================
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+
+def load_gcp_credentials():
+    # 1. อ่านคีย์ผ่าน Base64 ป้องกัน MalformedFraming 100%
+    if "GOOGLE_KEY_BASE64" in st.secrets:
+        try:
+            base64_str = st.secrets["GOOGLE_KEY_BASE64"].strip().strip('"').strip("'")
+            json_bytes = base64.b64decode(base64_str)
+            creds_dict = json.loads(json_bytes.decode("utf-8"))
+            return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        except Exception as e:
+            st.error(f"❌ อ่านรหัส GOOGLE_KEY_BASE64 ไม่สำเร็จ: {e}")
+            st.stop()
+    # 2. อ่านจากไฟล์ Local
+    elif os.path.exists("google_key.json"):
+        return Credentials.from_service_account_file("google_key.json", scopes=scopes)
+    
+    st.error("❌ ไม่พบข้อมูลการเชื่อมต่อ Google Sheets กรุณาตั้งค่า GOOGLE_KEY_BASE64 ใน Secrets")
+    st.stop()
+
+try:
+    creds = load_gcp_credentials()
+except Exception as e:
+    st.error(f"❌ โครงสร้างกุญแจ Google Sheets มีปัญหา: {e}")
+    st.stop()
+
+genai.configure(api_key=GEMINI_API_KEY)
+client = gspread.authorize(creds)
 
 # ==========================================
 # 1. ตั้งค่าการเชื่อมต่อ (Local & Cloud)
