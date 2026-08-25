@@ -255,7 +255,7 @@ if st.button("✨ ให้ AI วิเคราะห์คุณภาพข�
         sample_data = filtered_df[columns_to_show].head(50).to_string()
         prompt = f"คุณคือวิศวกร QA โรงงาน MDF วิเคราะห์ค่าความเรียบมัน Line {selected_line} (STD=4.00):\n{sample_data}"
         try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
+            model = genai.GenerativeModel("gemini-3.6-flash")
             st.info(model.generate_content(prompt).text)
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาดในการเชื่อมต่อ AI: {e}")
