@@ -71,11 +71,18 @@ THAI_MONTHS = {
 
 @st.cache_data(ttl=600)
 def load_data():
-    # ดึงด้วย Sheet ID เฉพาะตัวกุญแจ
-    sheet = client.open_by_key("1P0ZlzhP5RtAYjl-f_KE7dxrpsrxEMZYDCH4TwyKT0Tw").sheet1
+    try:
+        sheet = client.open_by_key("1P0ZlzhP5RtAYjl-f_KE7dxrpsrxEMZYDCH4TwyKT0Tw").sheet1
+    except Exception as e:
+        service_email = getattr(creds, 'service_account_email', 'ไม่พบข้อมูลอีเมล')
+        st.error(f"❌ **ไม่มีสิทธิ์เข้าถึง Google Sheet!**\n\nโปรดคัดลอกอีเมลนี้: **`{service_email}`** นำไปกด **Share (แชร์)** ใน Google Sheet แล้วกำหนดสิทธิ์เป็น **Editor (ผู้แก้ไข)** ครับ")
+        st.stop()
+
     data = sheet.get_all_records()
     df_data = pd.DataFrame(data)
     df_data.columns = df_data.columns.str.strip()
+    # ... (ส่วนประมวลผลข้อมูลตามเดิม) ...
+    return df_data
 
     def smart_parse_date(series):
         def clean_val(val):
