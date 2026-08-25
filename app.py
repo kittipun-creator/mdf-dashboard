@@ -81,38 +81,35 @@ def load_data():
     data = sheet.get_all_records()
     df_data = pd.DataFrame(data)
     df_data.columns = df_data.columns.str.strip()
-    # ... (ส่วนประมวลผลข้อมูลตามเดิม) ...
-    return df_data
+
+    def clean_val(val):
+        if pd.isna(val) or str(val).strip() in ["", "nan", "None", "NaT", "null", "-", "0"]:
+            return None
+        val_str = str(val).strip()
+        val_str = val_str.translate(str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789"))
+        for th, en in THAI_MONTHS.items():
+            if th in val_str:
+                val_str = val_str.replace(th, en)
+                break
+        val_str = re.sub(r'\b2569\b', '2026', val_str)
+        val_str = re.sub(r'([/.-])69(?!\d)', r'\1 2026', val_str)
+        val_str = re.sub(r'\b(2[45]\d{2})\b', lambda m: str(int(m.group(0)) - 543), val_str)
+        return val_str
+
+    def adjust_year(dt):
+        if pd.notna(dt):
+            if dt.year > 2400:
+                return dt.replace(year=dt.year - 543)
+            if 1960 <= dt.year <= 1970:
+                return dt.replace(year=dt.year + 57)
+            if 2060 <= dt.year <= 2070:
+                return dt.replace(year=dt.year - 43)
+            return dt
+        return pd.NaT
 
     def smart_parse_date(series):
-        def clean_val(val):
-            if pd.isna(val) or str(val).strip() in ["", "nan", "None", "NaT", "null", "-", "0"]:
-                return None
-            val_str = str(val).strip()
-            val_str = val_str.translate(str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789"))
-            for th, en in THAI_MONTHS.items():
-                if th in val_str:
-                    val_str = val_str.replace(th, en)
-                    break
-            val_str = re.sub(r'\b2569\b', '2026', val_str)
-            val_str = re.sub(r'([/.-])69(?!\d)', r'\1 2026', val_str)
-            val_str = re.sub(r'\b(2[45]\d{2})\b', lambda m: str(int(m.group(0)) - 543), val_str)
-            return val_str
-
         cleaned = series.apply(clean_val)
         parsed = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
-        
-        def adjust_year(dt):
-            if pd.notna(dt):
-                if dt.year > 2400:
-                    return dt.replace(year=dt.year - 543)
-                if 1960 <= dt.year <= 1970:
-                    return dt.replace(year=dt.year + 57)
-                if 2060 <= dt.year <= 2070:
-                    return dt.replace(year=dt.year - 43)
-                return dt
-            return pd.NaT
-
         return parsed.apply(adjust_year)
 
     for col in ["วันที่ผลิต", "วันที่ขัด"]:
